@@ -34,6 +34,11 @@ typedef struct {
  */
 void usb_wrap_hal_init(usb_wrap_hal_context_t *hal);
 
+/**
+ * @brief Disable the USB WRAP HAL driver
+ */
+void usb_wrap_hal_disable(void);
+
 /* ---------------------------- USB PHY Control  ---------------------------- */
 
 #if USB_WRAP_LL_EXT_PHY_SUPPORTED

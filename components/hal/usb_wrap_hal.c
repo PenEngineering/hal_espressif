@@ -16,6 +16,11 @@ void usb_wrap_hal_init(usb_wrap_hal_context_t *hal)
 #endif
 }
 
+void usb_wrap_hal_disable(void)
+{
+    usb_wrap_ll_enable_bus_clock(false);
+}
+
 #if USB_WRAP_LL_EXT_PHY_SUPPORTED
 void usb_wrap_hal_phy_set_external(usb_wrap_hal_context_t *hal, bool external)
 {
