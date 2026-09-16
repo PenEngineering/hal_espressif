@@ -279,6 +279,7 @@ static int task_create_wrapper(void *task_func, const char *name, uint32_t stack
 static void task_delete_wrapper(void *task_handle);
 static bool is_in_isr_wrapper(void);
 static void *malloc_internal_wrapper(size_t size);
+static void *malloc_wrapper(size_t size);
 static int read_mac_wrapper(uint8_t mac[6]);
 static void srand_wrapper(unsigned int seed);
 static int rand_wrapper(void);
@@ -345,7 +346,7 @@ static const struct osi_funcs_t osi_funcs_ro = {
 	._task_delete = task_delete_wrapper,
 	._is_in_isr = is_in_isr_wrapper,
 	._cause_sw_intr_to_core = NULL,
-	._malloc = malloc_internal_wrapper,
+	._malloc = malloc_wrapper,
 	._malloc_internal = malloc_internal_wrapper,
 	._free = esp_bt_free,
 	._read_efuse_mac = read_mac_wrapper,
@@ -523,7 +524,7 @@ static bool IRAM_ATTR is_in_isr_wrapper(void)
 
 static void *semphr_create_wrapper(uint32_t max, uint32_t init)
 {
-	struct k_sem *sem = (struct k_sem *) esp_bt_malloc_func(sizeof(struct k_sem));
+	struct k_sem *sem = (struct k_sem *) malloc_wrapper(sizeof(struct k_sem));
 
 	if (sem == NULL) {
 		LOG_ERR("semaphore malloc failed");
@@ -588,7 +589,7 @@ static int32_t semphr_give_wrapper(void *semphr)
 
 static void *mutex_create_wrapper(void)
 {
-	struct k_mutex *my_mutex = (struct k_mutex *) esp_bt_malloc_func(sizeof(struct k_mutex));
+	struct k_mutex *my_mutex = (struct k_mutex *) malloc_wrapper(sizeof(struct k_mutex));
 
 	if (my_mutex == NULL) {
 		LOG_ERR("mutex malloc failed");
@@ -623,14 +624,14 @@ static int32_t mutex_unlock_wrapper(void *mutex)
 
 static void *queue_create_wrapper(uint32_t queue_len, uint32_t item_size)
 {
-	struct bt_queue_t *queue = esp_bt_malloc_func(sizeof(struct bt_queue_t));
+	struct bt_queue_t *queue = malloc_wrapper(sizeof(struct bt_queue_t));
 
 	if (queue == NULL) {
 		LOG_ERR("queue malloc failed");
 		return NULL;
 	}
 
-	queue->pool = (uint8_t *)esp_bt_malloc_func(queue_len * item_size * sizeof(uint8_t));
+	queue->pool = (uint8_t *)malloc_wrapper(queue_len * item_size * sizeof(uint8_t));
 
 	if (queue->pool == NULL) {
 		LOG_ERR("queue pool malloc failed");
@@ -736,9 +737,23 @@ static void task_delete_wrapper(void *task_handle)
 	k_object_release(&bt_task_handle);
 }
 
+/* No remaining callers as of this change (osi_funcs_p below was the last
+ * one; moved to malloc_wrapper — same ISR-masking argument that already
+ * covers semphr/mutex/queue applies: it's only touched from thread context
+ * or from the same LEVEL1 BT ISR that flash-write masks). Kept as the
+ * documented rollback target if anything in this file ever needs to move
+ * back to internal DRAM — see malloc_wrapper's comment. */
 static void *malloc_internal_wrapper(size_t size)
 {
-	return esp_bt_malloc_func(sizeof(uint8_t) * size);
+	return k_malloc(size);
+}
+
+/* General-purpose allocator for the BT controller's own runtime buffers
+ * (PHY calibration data, connection/ACL state) and, experimentally, the
+ * semaphore/mutex/queue allocations above. Respects CONFIG_ESP_BT_HEAP_SPIRAM. */
+static void *malloc_wrapper(size_t size)
+{
+	return esp_bt_malloc_func(size);
 }
 
 static int32_t IRAM_ATTR read_mac_wrapper(uint8_t mac[6])
@@ -1274,7 +1289,7 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
 
 	btdm_controller_mem_init();
 
-	osi_funcs_p = (struct osi_funcs_t *)malloc_internal_wrapper(sizeof(struct osi_funcs_t));
+	osi_funcs_p = (struct osi_funcs_t *)malloc_wrapper(sizeof(struct osi_funcs_t));
 	if (osi_funcs_p == NULL) {
 		return ESP_ERR_NO_MEM;
 	}
