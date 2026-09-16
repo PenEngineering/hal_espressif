@@ -160,6 +160,13 @@ typedef struct {
 
 extern wifi_osi_funcs_t g_wifi_osi_funcs;
 
+#if defined(CONFIG_ESP_SPIRAM) && defined(CONFIG_SOC_SERIES_ESP32S3)
+/* Populates g_wifi_osi_funcs (PSRAM-resident on this chip) from its internal
+ * const template. Must run once, after PSRAM/shared_multi_heap is up and
+ * before the first esp_wifi_init() call. See esp32s3/src/wifi/esp_wifi_adapter.c. */
+void wifi_osi_funcs_psram_init(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

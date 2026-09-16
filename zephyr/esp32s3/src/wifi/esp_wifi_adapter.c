@@ -735,7 +735,7 @@ static uint8_t coex_schm_flexible_period_get_wrapper(void)
 #endif
 }
 
-wifi_osi_funcs_t g_wifi_osi_funcs = {
+static const wifi_osi_funcs_t g_wifi_osi_funcs_ro = {
 	._version = ESP_WIFI_OS_ADAPTER_VERSION,
 	._env_is_chip = esp_coex_common_env_is_chip_wrapper,
 	._set_intr = set_intr_wrapper,
@@ -855,3 +855,20 @@ wifi_osi_funcs_t g_wifi_osi_funcs = {
 	._coex_schm_flexible_period_get = coex_schm_flexible_period_get_wrapper,
 	._magic = ESP_WIFI_OS_ADAPTER_MAGIC,
 };
+
+/* g_wifi_osi_funcs_ro's initializer only ever populates *this* copy, which
+ * the WiFi blob reads/writes through for the adapter's whole lifetime -
+ * placed in PSRAM like BT's osi_funcs_p, same interrupt-masking argument
+ * (see esp_bt_adapter.c). wifi_osi_funcs_psram_init() must run once, after
+ * shared_multi_heap/PSRAM is up and before the first esp_wifi_init() call
+ * (esp32_wifi_dev_init() in esp_wifi_drv.c). */
+#if defined(CONFIG_ESP_SPIRAM)
+wifi_osi_funcs_t g_wifi_osi_funcs __attribute__((section(".ext_ram.bss"), aligned(4)));
+#else
+wifi_osi_funcs_t g_wifi_osi_funcs;
+#endif
+
+void wifi_osi_funcs_psram_init(void)
+{
+	memcpy(&g_wifi_osi_funcs, &g_wifi_osi_funcs_ro, sizeof(g_wifi_osi_funcs));
+}
